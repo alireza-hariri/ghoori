@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "ghoori"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libmpv2",
  "libmpv2-sys",
