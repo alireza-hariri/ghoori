@@ -1,5 +1,5 @@
 <div align="center">
-<img src="icons/ghoori.svg" width="128" alt="Ghoori logo">
+<img src="icons/ghoori-256.png" width="128" alt="Ghoori logo">
 
 # Ghoori
 
