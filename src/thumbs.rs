@@ -5,9 +5,19 @@ use crate::render::GlRenderer;
 use libmpv2::Mpv;
 use libmpv2_sys as sys;
 use raylib::prelude::*;
+use std::ffi::CString;
 use std::time::{Duration, Instant};
 
 const THUMB_W: i32 = 240;
+
+/// Queue a command without waiting for the core: a blocking call can stall the UI thread while
+/// this instance's video output waits for the UI thread to render.
+fn command_async(mpv: &Mpv, args: &[&str]) -> bool {
+    let Ok(args) = args.iter().map(|a| CString::new(*a)).collect::<Result<Vec<_>, _>>() else { return false };
+    let mut ptrs: Vec<*const std::ffi::c_char> = args.iter().map(|a| a.as_ptr()).collect();
+    ptrs.push(std::ptr::null());
+    unsafe { sys::mpv_command_async(mpv.ctx.as_ptr(), 0, ptrs.as_mut_ptr()) >= 0 }
+}
 
 pub struct Thumbnailer {
     // Field order matters: the render context must be freed before its mpv core.
@@ -90,9 +100,9 @@ impl Thumbnailer {
         self.want = None;
         self.requested = None;
         self.shown = None;
-        let _ = match path {
-            Some(p) => self.mpv.command("loadfile", &[p, "replace"]),
-            None => self.mpv.command("stop", &[]),
+        match path {
+            Some(p) => command_async(&self.mpv, &["loadfile", p, "replace"]),
+            None => command_async(&self.mpv, &["stop"]),
         };
     }
 
@@ -140,7 +150,7 @@ impl Thumbnailer {
             && self.requested.is_none_or(|r| (r - want).abs() > 0.5)
         {
             let t = format!("{want:.2}");
-            if self.mpv.command("seek", &[&t, "absolute+keyframes"]).is_ok() {
+            if command_async(&self.mpv, &["seek", &t, "absolute+keyframes"]) {
                 self.seek_started = Some(Instant::now());
                 self.requested = Some(want);
             }

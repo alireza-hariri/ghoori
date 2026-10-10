@@ -44,6 +44,8 @@ pub struct Fonts {
     /// Atlases rasterized at exact physical pixel sizes, so small UI text is drawn 1:1 instead of
     /// being minified from the large atlas (blurry, especially under fractional desktop scaling).
     exact: RefCell<HashMap<i32, Font>>,
+    /// Exact sizes requested but not yet rasterized; see `load_pending`.
+    pending: RefCell<Vec<i32>>,
     /// Physical pixels per layout unit (the HiDPI scale).
     scale: Cell<f32>,
 }
@@ -91,12 +93,13 @@ impl Fonts {
                     font: Some(Font::from_raw(f)),
                     path: Some(cpath),
                     exact: RefCell::default(),
+                    pending: RefCell::default(),
                     scale: Cell::new(1.0),
                 };
             }
         }
         eprintln!("ghoori: no TrueType font found, falling back to raylib's bitmap font");
-        Self { font: None, path: None, exact: RefCell::default(), scale: Cell::new(1.0) }
+        Self { font: None, path: None, exact: RefCell::default(), pending: RefCell::default(), scale: Cell::new(1.0) }
     }
 
     /// Set the HiDPI scale (physical pixels per layout unit) for subsequent text.
@@ -110,22 +113,29 @@ impl Fonts {
     fn pick(&self, size: f32) -> (raylib::ffi::Font, f32) {
         let scale = self.scale.get();
         let px = (size * scale).round() as i32;
-        if let Some(path) = &self.path
-            && (6..=MAX_EXACT_PX).contains(&px)
-        {
-            let mut exact = self.exact.borrow_mut();
-            if !exact.contains_key(&px)
-                && let Some(f) = load_raw(path, px)
-            {
-                unsafe { raylib::ffi::SetTextureFilter(f.texture, TextureFilter::TEXTURE_FILTER_BILINEAR as i32) };
-                exact.insert(px, unsafe { Font::from_raw(f) });
-            }
-            if let Some(f) = exact.get(&px) {
+        if self.path.is_some() && (6..=MAX_EXACT_PX).contains(&px) {
+            if let Some(f) = self.exact.borrow().get(&px) {
                 // Drawn at px / scale layout units, the screen transform maps it to exactly px pixels.
                 return (*f.as_ref(), px as f32 / scale);
             }
+            // Rasterizing mid-frame can hold back a frame (e.g. a video's first one); use the large
+            // atlas until `load_pending` has made this size.
+            let mut pending = self.pending.borrow_mut();
+            if !pending.contains(&px) {
+                pending.push(px);
+            }
         }
         (self.raw(), size)
+    }
+
+    /// Rasterize one requested exact-size atlas. Call once per frame, after presenting it.
+    pub fn load_pending(&self) {
+        let Some(path) = &self.path else { return };
+        let Some(px) = self.pending.borrow_mut().pop() else { return };
+        if let Some(f) = load_raw(path, px) {
+            unsafe { raylib::ffi::SetTextureFilter(f.texture, TextureFilter::TEXTURE_FILTER_BILINEAR as i32) };
+            self.exact.borrow_mut().insert(px, unsafe { Font::from_raw(f) });
+        }
     }
 
     fn raw(&self) -> raylib::ffi::Font {

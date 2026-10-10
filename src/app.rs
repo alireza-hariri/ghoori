@@ -441,7 +441,7 @@ impl App {
         // Keep subtitles clear of the control bar while it is shown.
         let margin = if self.ui_wanted() && self.inp.h > 0.0 { 22 + (BAR_H / self.inp.h * 720.0) as i64 } else { 22 };
         if self.player.has_file() && self.sub_margin != Some(margin) {
-            self.player.set_str("sub-margin-y", &margin.to_string());
+            self.player.set_str_async("sub-margin-y", &margin.to_string());
             self.sub_margin = Some(margin);
         }
 
@@ -459,10 +459,11 @@ impl App {
             self.video_gl.render(rt.id, rw, rh, false);
         }
 
-        // Thumbnailer follows the current file.
+        // Thumbnailer follows the current file, once it is playing so it does not compete with startup.
         let st = &self.player.st;
         let thumb_src = (self.settings.thumbnails
             && self.player.has_file()
+            && st.started
             && st.has_motion_video()
             && st.duration > 0.0
             && util::is_local_file(&st.path))
@@ -487,6 +488,7 @@ impl App {
             self.take_snapshot();
         }
         self.video_gl.report_swap();
+        self.fonts.load_pending();
 
         if win_fullscreen || std::mem::take(&mut self.request_fullscreen) {
             self.toggle_fullscreen(rl);

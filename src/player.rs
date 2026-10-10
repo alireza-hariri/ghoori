@@ -4,7 +4,7 @@ use crate::util;
 use libmpv2::{Format, Mpv};
 use libmpv2_sys as sys;
 use serde_json::Value;
-use std::ffi::{CStr, c_char, c_int};
+use std::ffi::{CStr, CString, c_char, c_int};
 
 pub fn mpv_err_str(code: c_int) -> String {
     unsafe { CStr::from_ptr(sys::mpv_error_string(code)) }.to_string_lossy().into_owned()
@@ -87,6 +87,8 @@ pub struct State {
     pub title: String,
     pub path: String,
     pub idle: bool,
+    /// The current file has shown its first frame (playback restarted after loading).
+    pub started: bool,
     pub eof: bool,
     pub buffering: bool,
     pub cache_percent: i64,
@@ -403,6 +405,22 @@ impl Player {
             eprintln!("ghoori: set {name}={v} failed: {}", lib_err(e));
         }
     }
+    /// Like `set_str`, but never waits for the mpv core. Use from the render loop: while a file starts,
+    /// the core waits for the first frame to be rendered, so a blocking set would stall both.
+    pub fn set_str_async(&self, name: &str, v: &str) {
+        let (Ok(name), Ok(v)) = (CString::new(name), CString::new(v)) else { return };
+        let mut ptr = v.as_ptr();
+        // mpv copies the value before returning; the reply event is ignored.
+        unsafe {
+            sys::mpv_set_property_async(
+                self.mpv.ctx.as_ptr(),
+                0,
+                name.as_ptr(),
+                sys::mpv_format_MPV_FORMAT_STRING,
+                &mut ptr as *mut *const c_char as *mut std::ffi::c_void,
+            );
+        }
+    }
     pub fn set_f64(&self, name: &str, v: f64) {
         let _ = self.mpv.set_property(name, v);
     }
@@ -479,9 +497,13 @@ impl Player {
             match ev.event_id {
                 sys::mpv_event_id_MPV_EVENT_NONE => break,
                 sys::mpv_event_id_MPV_EVENT_SHUTDOWN => out.push(PlayerEvent::Shutdown),
+                sys::mpv_event_id_MPV_EVENT_START_FILE => self.st.started = false,
                 sys::mpv_event_id_MPV_EVENT_FILE_LOADED => out.push(PlayerEvent::FileLoaded),
                 sys::mpv_event_id_MPV_EVENT_VIDEO_RECONFIG => out.push(PlayerEvent::VideoReconfig),
-                sys::mpv_event_id_MPV_EVENT_PLAYBACK_RESTART => out.push(PlayerEvent::PlaybackRestart),
+                sys::mpv_event_id_MPV_EVENT_PLAYBACK_RESTART => {
+                    self.st.started = true;
+                    out.push(PlayerEvent::PlaybackRestart);
+                }
                 sys::mpv_event_id_MPV_EVENT_END_FILE => {
                     let ef = unsafe { &*(ev.data as *const sys::mpv_event_end_file) };
                     if ef.reason == sys::mpv_end_file_reason_MPV_END_FILE_REASON_ERROR {
