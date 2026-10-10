@@ -1,8 +1,17 @@
+<div align="center">
+<img src="icons/ghoori.svg" width="128" alt="Ghoori logo">
+
 # Ghoori
 
-A media player built in Rust on [libmpv](https://mpv.io) (via [libmpv-rs](https://github.com/kohsine/libmpv-rs), crate `libmpv2`)
-and [raylib-rs](https://github.com/raylib-rs/raylib-rs). mpv does the decoding and rendering through its OpenGL
-render API; raylib owns the window and draws the whole interface on top.
+A media player for Linux, written in Rust.
+</div>
+
+Ghoori plays anything mpv plays — local files, playlists, network streams — with a clean, fast interface on top.
+Under the hood, [libmpv2-rs](https://crates.io/crates/libmpv2 decodes and renders)
+video through its OpenGL render API, while [raylib](https://github.com/raylib-rs/raylib-rs) owns the window and
+draws the entire interface.
+
+Vibe-coded: most of it was written with an LLM, then reviewed and hammered on by hand until it worked properly.
 
 ## Features
 
