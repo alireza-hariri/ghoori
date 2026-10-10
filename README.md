@@ -33,17 +33,17 @@ Vibe-coded: most of it was written with an LLM, then reviewed and hammered on by
 
 ## Install
 
-Ghoori needs **libmpv** (mpv 0.35 or newer). It is usually already installed if you have mpv. The installer checks for it
+Ghoori needs **libmpv** (mpv 0.38 or newer). It is usually already installed if you have mpv. The installer checks for it
 and tells you the exact command for your distro if it is missing.
 
 | Distro | Install libmpv |
 | --- | --- |
 | Arch, Manjaro, EndeavourOS | `sudo pacman -S mpv` |
-| Debian 12+, Ubuntu 23.04+, Mint 22+ | `sudo apt install libmpv2` |
+| Debian 13+, Ubuntu 25.04+ | `sudo apt install libmpv2` |
 | Fedora | `sudo dnf install mpv-libs` (enable [RPM Fusion](https://rpmfusion.org) for all codecs) |
 | openSUSE Tumbleweed | `sudo zypper install libmpv2` |
 
-Ubuntu 22.04 and Debian 11 ship an older libmpv that is not supported.
+Debian 12 and Ubuntu 24.04 (and older) ship an mpv that is too old.
 
 ### Option 1: prebuilt binary (any distro, x86_64)
 

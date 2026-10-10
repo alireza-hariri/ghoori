@@ -96,7 +96,7 @@ runtime_hint() {
         debian) echo "    sudo apt install libmpv2" ;;
         fedora) echo "    sudo dnf install mpv-libs" ;;
         suse) echo "    sudo zypper install libmpv2" ;;
-        *) echo "    Install libmpv (mpv 0.35 or newer) with your package manager." ;;
+        *) echo "    Install libmpv (mpv 0.38 or newer) with your package manager." ;;
     esac
 }
 

@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     # Built on Debian 12 so the binary runs on any distro with glibc >= 2.36 and libmpv.so.2
-    # (Debian 12+, Ubuntu 23.04+, Fedora 37+, Arch, openSUSE Tumbleweed, ...).
+    # (the user still needs mpv >= 0.38 installed).
     container: debian:bookworm
     steps:
       - name: Install build dependencies
