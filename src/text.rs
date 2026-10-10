@@ -16,8 +16,22 @@ const FONT_CANDIDATES: &[&str] = &[
     "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
     "/usr/share/fonts/TTF/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/google-noto/NotoSans-Regular.ttf",
+    "/usr/share/fonts/truetype/NotoSans-Regular.ttf",
+    "/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/DejaVuSans.ttf",
     "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
 ];
+
+/// Ask fontconfig for a sans font covering Persian, for layouts not in FONT_CANDIDATES.
+/// raylib only loads plain .ttf/.otf files (no collections).
+fn fontconfig_sans() -> Option<String> {
+    let out = std::process::Command::new("fc-match").args(["-f", "%{file}", "sans-serif:lang=fa"]).output().ok()?;
+    let path = String::from_utf8(out.stdout).ok()?;
+    let ext = std::path::Path::new(&path).extension()?.to_ascii_lowercase();
+    (ext == "ttf" || ext == "otf").then_some(path)
+}
 
 const BASE_SIZE: i32 = 64;
 /// Text up to this many physical pixels gets its own atlas rasterized at exactly that size.
@@ -59,10 +73,12 @@ fn load_raw(path: &std::ffi::CStr, px: i32) -> Option<raylib::ffi::Font> {
 impl Fonts {
     pub fn load(rl: &mut RaylibHandle, thread: &RaylibThread, explicit: Option<&str>) -> Self {
         let _ = (rl, thread); // GL context must exist; raylib's loader is global.
-        let mut paths: Vec<&str> = explicit.into_iter().collect();
-        paths.extend(FONT_CANDIDATES);
+        // fc-match is only spawned if none of the known paths load.
+        let paths = (explicit.into_iter().map(String::from))
+            .chain(FONT_CANDIDATES.iter().map(|p| p.to_string()))
+            .chain(std::iter::once_with(fontconfig_sans).flatten());
         for p in paths {
-            if !std::path::Path::new(p).exists() {
+            if !std::path::Path::new(&p).exists() {
                 continue;
             }
             let Ok(cpath) = std::ffi::CString::new(p) else { continue };

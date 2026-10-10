@@ -1,0 +1,56 @@
+# Maintainer: Alireza Hariri <ali.r.hariri@gmail.com>
+pkgname=ghoori-git
+_pkgname=ghoori
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="Media player built on mpv and raylib"
+arch=('x86_64' 'aarch64')
+url="https://github.com/alireza-hariri/ghoori"
+license=('MIT')
+depends=('mpv' 'libgcc' 'glibc' 'hicolor-icon-theme')
+optdepends=('ttf-vazirmatn: best rendering of Persian/Arabic titles'
+            'yt-dlp: play YouTube and other web video URLs')
+makedepends=('git' 'cargo' 'cmake' 'clang' 'wayland' 'libxkbcommon' 'libx11' 'libxrandr' 'libxinerama'
+             'libxcursor' 'libxi')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+options=('!lto')
+source=("git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    local version
+    version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+    printf '%s.r%s.g%s' "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+    cd "$_pkgname"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd "$_pkgname"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release
+}
+
+check() {
+    cd "$_pkgname"
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --release
+}
+
+package() {
+    cd "$_pkgname"
+    install -Dm755 target/release/ghoori "$pkgdir/usr/bin/ghoori"
+    install -Dm644 ghoori.desktop "$pkgdir/usr/share/applications/ghoori.desktop"
+    install -Dm644 icons/ghoori.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/ghoori.svg"
+    install -Dm644 icons/ghoori.png "$pkgdir/usr/share/icons/hicolor/48x48/apps/ghoori.png"
+    install -Dm644 icons/ghoori-256.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/ghoori.png"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$_pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -7,7 +7,7 @@ A media player for Linux, written in Rust.
 </div>
 
 Ghoori plays anything mpv plays — local files, playlists, network streams — with a clean, fast interface on top.
-Under the hood, [libmpv2-rs](https://crates.io/crates/libmpv2 decodes and renders)
+Under the hood, mpv through [libmpv2-rs](https://crates.io/crates/libmpv2) decodes and renders
 video through its OpenGL render API, while [raylib](https://github.com/raylib-rs/raylib-rs) owns the window and
 draws the entire interface.
 
@@ -31,19 +31,90 @@ Vibe-coded: most of it was written with an LLM, then reviewed and hammered on by
 - Persian/Arabic titles shaped and ordered correctly
 - Right-click context menu and full keyboard control (press **F1** in the player)
 
-## Requirements
+## Install
 
-- libmpv (mpv ≥ 0.38, client API 2.x)
-- A C toolchain, CMake and clang (raylib is compiled from source by `raylib-sys`)
-- Wayland and/or X11 development libraries (GLFW is built with both and picks the session's backend)
+Ghoori needs **libmpv** (mpv 0.35 or newer). It is usually already installed if you have mpv. The installer checks for it
+and tells you the exact command for your distro if it is missing.
 
-On Arch Linux: `pacman -S mpv cmake clang wayland libxkbcommon libx11 libxrandr libxinerama libxcursor libxi`
+| Distro | Install libmpv |
+| --- | --- |
+| Arch, Manjaro, EndeavourOS | `sudo pacman -S mpv` |
+| Debian 12+, Ubuntu 23.04+, Mint 22+ | `sudo apt install libmpv2` |
+| Fedora | `sudo dnf install mpv-libs` (enable [RPM Fusion](https://rpmfusion.org) for all codecs) |
+| openSUSE Tumbleweed | `sudo zypper install libmpv2` |
 
-## Build & run
+Ubuntu 22.04 and Debian 11 ship an older libmpv that is not supported.
+
+### Option 1: prebuilt binary (any distro, x86_64)
 
 ```sh
-cargo build --release
-./target/release/ghoori [OPTIONS] [FILE|URL|DIR]...
+curl -fsSL https://github.com/alireza-hariri/ghoori/releases/latest/download/ghoori-x86_64-linux.tar.gz | tar xz
+./ghoori-x86_64-linux/install.sh
+```
+
+This installs Ghoori for your user into `~/.local` and adds it to your application menu. It asks whether Ghoori should
+become your default video and audio player. Use `sudo ./ghoori-x86_64-linux/install.sh` to install for all users into
+`/usr/local` instead. Afterwards the `ghoori-x86_64-linux` folder can be deleted.
+
+### Option 2: Arch Linux package
+
+```sh
+git clone https://github.com/alireza-hariri/ghoori.git
+cd ghoori/packaging/arch
+makepkg -si
+```
+
+This builds the latest code from GitHub into a normal pacman package (`ghoori-git`), so `pacman -R ghoori-git`
+removes it. Re-run `makepkg -si` in the same folder to update.
+
+### Option 3: build from source
+
+You need Rust 1.88 or newer. Most distros ship an older `rustc`, so get it from [rustup.rs](https://rustup.rs). You also
+need these build dependencies:
+
+| Distro | Build dependencies |
+| --- | --- |
+| Arch | `sudo pacman -S --needed rust cmake clang mpv wayland libxkbcommon libx11 libxrandr libxinerama libxcursor libxi` |
+| Debian, Ubuntu | `sudo apt install build-essential cmake clang pkg-config libmpv-dev libwayland-dev libxkbcommon-dev wayland-protocols libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev` |
+| Fedora | `sudo dnf install gcc cmake clang mpv-devel wayland-devel libxkbcommon-devel libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel` |
+
+Then:
+
+```sh
+git clone https://github.com/alireza-hariri/ghoori.git
+cd ghoori
+./install.sh
+```
+
+`install.sh` builds a release binary and installs it like the prebuilt one. To install system-wide, build as your
+normal user first and then install with sudo: `cargo build --release && sudo ./install.sh`. Run
+`./install.sh --help` for all options.
+
+To just try it without installing: `cargo run --release -- video.mkv`.
+
+### Updating
+
+- **Prebuilt binary:** run the two commands from option 1 again.
+- **Arch package:** run `makepkg -si` again in `ghoori/packaging/arch`.
+- **From source:** run `git pull && ./install.sh` in the `ghoori` folder.
+
+Settings and resume positions are kept.
+
+### Uninstalling
+
+```sh
+~/.local/share/ghoori/install.sh --uninstall            # user install
+sudo /usr/local/share/ghoori/install.sh --uninstall     # system-wide install
+```
+
+Your settings in `~/.config/ghoori` are left in place. Delete that folder too if you want them gone.
+
+## Usage
+
+Open Ghoori from your application menu, open files with it from your file manager, or run it from a terminal:
+
+```sh
+ghoori [OPTIONS] [FILE|URL|DIR]...
 ```
 
 | Option | Meaning |
@@ -54,10 +125,24 @@ cargo build --release
 | `--no-thumbnails` | Disable seek previews |
 | `--mpv-<opt>=<val>` | Pass any option to mpv, e.g. `--mpv-hwdec=no` |
 | `-v`, `--verbose` | Show mpv and raylib logs |
+| `-V`, `--version` | Show the version |
 
-To install the binary, launcher entry and icon into `~/.local` (or `/usr/local` with `sudo`), run `./install.sh`.
-Use `./install.sh --uninstall` to remove them. The icon source is `icons/ghoori.svg`. The PNGs are rendered from it
-with `rsvg-convert -w N -h N icons/ghoori.svg`.
+YouTube and other web video URLs work when [yt-dlp](https://github.com/yt-dlp/yt-dlp) is installed.
+
+## Troubleshooting
+
+- **`ghoori: command not found` after installing:** `~/.local/bin` is not on your `PATH`. The installer prints the
+  line to add to `~/.bashrc` or `~/.zshrc`. The application-menu entry works either way.
+- **`error while loading shared libraries: libmpv.so.2`:** install libmpv (see the table under [Install](#install)).
+- **Black video, stutter or a crash on start:** try software decoding with `ghoori --mpv-hwdec=no video.mkv`. If that
+  helps, put `hwdec=no` in `~/.config/ghoori/mpv.conf` to make it permanent, and please open an issue. Run with
+  `--verbose` to see mpv's log.
+- **Persian/Arabic titles show as boxes:** install the Vazirmatn font (`ttf-vazirmatn` on Arch, `fonts-vazirmatn` on
+  Debian/Ubuntu), or point `GHOORI_FONT` at any `.ttf` file that covers the script.
+- **Ghoori is not offered in "Open with":** log out and back in once after installing so your desktop picks up the new
+  launcher entry.
+
+When reporting a bug, please include the output of `ghoori --version` and of `ghoori --verbose FILE`.
 
 ## Keyboard
 
@@ -125,3 +210,12 @@ Notes on the libmpv/raylib integration:
   logical units, so the app sets the mouse scale itself every frame from GLFW's window size.
 - Text is rasterized into a separate atlas for each physical pixel size it is drawn at, and glyph origins are snapped
   to physical pixels. This keeps small UI text sharp at fractional scales instead of minifying a large atlas.
+
+## Icons
+
+The icon source is `icons/ghoori.svg`. The PNGs are rendered from it with `rsvg-convert -w N -h N icons/ghoori.svg`.
+
+## License
+
+Ghoori is released under the [MIT License](LICENSE). Release binaries link to libmpv, which is licensed separately
+(LGPL or GPL, depending on how your distro builds it).

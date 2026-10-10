@@ -2,6 +2,10 @@
 name = "ghoori"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+description = "Media player built on mpv and raylib"
+repository = "https://github.com/alireza-hariri/ghoori"
 
 [dependencies]
 libmpv2 = "6.0.0"
