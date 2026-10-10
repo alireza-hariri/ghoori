@@ -1,0 +1,10 @@
+[package]
+name = "ghoori"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libmpv2 = "6.0.0"
+libmpv2-sys = "4"
+raylib = { version = "6.0.0", features = ["GLFW_BUILD_WAYLAND"] }
+serde_json = "1.0.151"
