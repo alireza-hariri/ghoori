@@ -25,6 +25,41 @@ unsafe extern "C" {
     fn glfwGetWindowSize(window: *mut c_void, w: *mut c_int, h: *mut c_int);
 }
 
+const GLFW_X11_CLASS_NAME: c_int = 0x0002_4001;
+const GLFW_X11_INSTANCE_NAME: c_int = 0x0002_4002;
+const GLFW_WAYLAND_APP_ID: c_int = 0x0002_6001;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn glfwWindowHintString(hint: c_int, value: *const c_char);
+    fn __real_glfwCreateWindow(
+        w: c_int,
+        h: c_int,
+        title: *const c_char,
+        mon: *mut c_void,
+        share: *mut c_void,
+    ) -> *mut c_void;
+}
+
+/// Linked in place of `glfwCreateWindow` (see build.rs): names the window "ghoori" so the desktop matches it
+/// with ghoori.desktop (taskbar icon, grouping) on Wayland (app-id) and X11 (WM_CLASS).
+#[cfg(target_os = "linux")]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn __wrap_glfwCreateWindow(
+    w: c_int,
+    h: c_int,
+    title: *const c_char,
+    mon: *mut c_void,
+    share: *mut c_void,
+) -> *mut c_void {
+    unsafe {
+        for hint in [GLFW_WAYLAND_APP_ID, GLFW_X11_CLASS_NAME, GLFW_X11_INSTANCE_NAME] {
+            glfwWindowHintString(hint, c"ghoori".as_ptr());
+        }
+        __real_glfwCreateWindow(w, h, title, mon, share)
+    }
+}
+
 const GLFW_PLATFORM_WAYLAND: c_int = 0x0006_0003;
 const GLFW_PLATFORM_X11: c_int = 0x0006_0004;
 

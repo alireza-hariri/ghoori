@@ -156,6 +156,12 @@ fn main() {
         .msaa_4x()
         .build();
     rl.set_window_min_size(480, 300);
+    // Wayland compositors take the icon from ghoori.desktop (matched by app-id); X11 needs it on the window.
+    if !render::is_wayland()
+        && let Ok(icon) = Image::load_image_from_mem(".png", include_bytes!("../icons/ghoori-256.png"))
+    {
+        rl.set_window_icon(&icon);
+    }
     rl.set_exit_key(None);
     rl.set_target_fps(0);
 

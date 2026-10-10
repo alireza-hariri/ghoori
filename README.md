@@ -46,8 +46,9 @@ cargo build --release
 | `--mpv-<opt>=<val>` | Pass any option to mpv, e.g. `--mpv-hwdec=no` |
 | `-v`, `--verbose` | Show mpv and raylib logs |
 
-To install a launcher entry: copy `ghoori.desktop` to `~/.local/share/applications/` and the binary somewhere on
-your `PATH`.
+To install the binary, launcher entry and icon into `~/.local` (or `/usr/local` with `sudo`), run `./install.sh`.
+Use `./install.sh --uninstall` to remove them. The icon source is `icons/ghoori.svg`. The PNGs are rendered from it
+with `rsvg-convert -w N -h N icons/ghoori.svg`.
 
 ## Keyboard
 
@@ -105,8 +106,13 @@ Notes on the libmpv/raylib integration:
 - mpv expects default GL state. raylib enables back-face culling and blending, so both are turned off before every
   mpv render and restored afterwards. Otherwise mpv's quad gets culled and the video is black.
 - The native Wayland/X11 display is passed to mpv so VAAPI interop works.
+- raylib resets GLFW's window hints inside `InitWindow`. `build.rs` therefore links raylib's `glfwCreateWindow` call
+  through a wrapper that sets the Wayland app-id and the X11 class to `ghoori`. Desktops use these to match the
+  window to `ghoori.desktop` and its icon.
 - The window uses raylib's HiDPI mode. Under fractional desktop scaling (e.g. KDE at 115%) the UI is laid out in
   logical pixels while the framebuffer, video and text render at native physical resolution. Without it, GLFW
   (built with both X11 and Wayland) scales the framebuffer behind raylib's back and viewport and mouse coordinates
   drift apart. raylib also rescales the mouse as if cursor positions were in pixels, but Wayland reports them in
   logical units, so the app sets the mouse scale itself every frame from GLFW's window size.
+- Text is rasterized into a separate atlas for each physical pixel size it is drawn at, and glyph origins are snapped
+  to physical pixels. This keeps small UI text sharp at fractional scales instead of minifying a large atlas.

@@ -21,8 +21,9 @@ const ERROR: Color = Color::new(225, 80, 80, 255);
 const BAR_H: f32 = 88.0;
 const TOP_H: f32 = 52.0;
 const PANEL_W: f32 = 400.0;
-const PL_ROW: f32 = 40.0;
-const MENU_ROW: f32 = 32.0;
+const PL_ROW: f32 = 46.0;
+const MENU_ROW: f32 = 40.0;
+const BROWSER_ROW: f32 = 44.0;
 const HIDE_AFTER: f64 = 2.2;
 const DOUBLE_CLICK: f64 = 0.28;
 
@@ -405,6 +406,10 @@ impl App {
 
     pub fn frame(&mut self, rl: &mut RaylibHandle, thread: &RaylibThread) {
         self.inp = Input::capture(rl, self.inp.mouse);
+        // Text is rasterized per physical size; tell the fonts how layout units map to pixels.
+        if rl.get_screen_width() > 0 {
+            self.fonts.set_scale(rl.get_render_width() as f32 / rl.get_screen_width() as f32);
+        }
         self.consumed = false;
         if self.snapshot.is_some() {
             self.apply_test_script();
@@ -1360,7 +1365,7 @@ impl App {
         self.draw_backdrop(d);
         let (w, h) = (self.inp.w, self.inp.h);
         let recents: Vec<String> = self.settings.recent.iter().take(6).cloned().collect();
-        let list_h = if recents.is_empty() { 0.0 } else { 40.0 + recents.len() as f32 * 34.0 };
+        let list_h = if recents.is_empty() { 0.0 } else { 40.0 + recents.len() as f32 * 40.0 };
         let block_h = 300.0 + list_h;
         let mut y = ((h - block_h) / 2.0).max(20.0);
         let logo = (h * 0.16).clamp(60.0, 130.0);
@@ -1408,22 +1413,22 @@ impl App {
         if !recents.is_empty() {
             let lw = 560f32.min(w - 40.0);
             let x = (w - lw) / 2.0;
-            self.fonts.draw(d, "RECENT", v2(x + 4.0, y), 13.0, DIM);
+            self.fonts.draw(d, "RECENT", v2(x + 4.0, y), 14.0, DIM);
             y += 24.0;
             for r in &recents {
-                let row = Rectangle::new(x, y, lw, 32.0);
+                let row = Rectangle::new(x, y, lw, 38.0);
                 let hot = self.hover(row, Layer::Video);
                 if hot {
                     d.draw_rectangle_rounded(row, 0.25, 6, ROW_HOVER);
                 }
-                icons::file(d, v2(x + 18.0, y + 16.0), 16.0, if hot { ACCENT } else { DIM });
+                icons::file(d, v2(x + 18.0, y + 19.0), 19.0, if hot { ACCENT } else { DIM });
                 let name = util::display_name(r);
-                let fitted = self.fonts.fit(&name, 17.0, lw - 60.0).into_owned();
-                self.fonts.draw(d, &fitted, v2(x + 38.0, y + 6.0), 17.0, if hot { Color::WHITE } else { FG });
+                let fitted = self.fonts.fit(&name, 19.0, lw - 60.0).into_owned();
+                self.fonts.draw(d, &fitted, v2(x + 40.0, y + 8.0), 19.0, if hot { Color::WHITE } else { FG });
                 if self.click(row, Layer::Video) {
                     self.exec(Action::Open(vec![r.clone()], false));
                 }
-                y += 34.0;
+                y += 40.0;
             }
         }
         let help = "Press F1 for keyboard shortcuts";
@@ -1668,7 +1673,10 @@ impl App {
         // Repeat: toggles repeat-file, or clears an active A-B loop.
         let (ab, loop_file) = (self.player.st.ab_a.is_some(), self.player.st.loop_file);
         let lc = v2(rx - sw / 2.0 - 30.0, cy);
-        if self.icon_button(d, lc, 22.0, Layer::Bar, ab || loop_file, |d, c, s, col| icons::repeat(d, c, s, col, !ab)) {
+        if self.player.has_file()
+            && self
+                .icon_button(d, lc, 22.0, Layer::Bar, ab || loop_file, |d, c, s, col| icons::repeat(d, c, s, col, !ab))
+        {
             self.exec(if ab { Action::ClearAbLoop } else { Action::ToggleLoopFile });
         }
     }
@@ -1815,7 +1823,7 @@ impl App {
         self.fonts.draw(d, "Playlist", v2(r.x + 18.0, r.y + 16.0), 22.0, FG);
         let count = format!("{n} item{}", if n == 1 { "" } else { "s" });
         let cw = self.fonts.measure("Playlist", 22.0);
-        self.fonts.draw(d, &count, v2(r.x + 28.0 + cw, r.y + 22.0), 14.0, DIM);
+        self.fonts.draw(d, &count, v2(r.x + 28.0 + cw, r.y + 21.0), 16.0, DIM);
 
         // Header buttons.
         let by = r.y + 28.0;
@@ -1874,20 +1882,26 @@ impl App {
                 d.draw_rectangle_rec(row, ROW_HOVER);
             }
             let num = format!("{}", i + 1);
-            let nw = self.fonts.measure(&num, 14.0);
+            let nw = self.fonts.measure(&num, 15.0);
             if item.current && !self.player.st.paused {
-                icons::play(d, v2(r.x + 26.0, y + PL_ROW / 2.0), 12.0, ACCENT);
+                icons::play(d, v2(r.x + 27.0, y + PL_ROW / 2.0), 14.0, ACCENT);
             } else {
-                self.fonts.draw(d, &num, v2(r.x + 30.0 - nw / 2.0, y + 12.0), 14.0, DIM);
+                self.fonts.draw(d, &num, v2(r.x + 30.0 - nw / 2.0, y + (PL_ROW - 15.0) / 2.0), 15.0, DIM);
             }
             let name = item.name();
             let maxw = r.width - 60.0 - if hot { 30.0 } else { 0.0 };
-            let fitted = self.fonts.fit(&name, 16.0, maxw).into_owned();
-            self.fonts.draw(d, &fitted, v2(r.x + 50.0, y + 10.0), 16.0, if item.current { ACCENT } else { FG });
+            let fitted = self.fonts.fit(&name, 18.0, maxw).into_owned();
+            self.fonts.draw(
+                d,
+                &fitted,
+                v2(r.x + 52.0, y + (PL_ROW - 18.0) / 2.0 - 1.0),
+                18.0,
+                if item.current { ACCENT } else { FG },
+            );
             if hot {
-                let xr = Rectangle::new(r.x + r.width - 36.0, y + 6.0, 28.0, 28.0);
+                let xr = Rectangle::new(r.x + r.width - 38.0, y + (PL_ROW - 30.0) / 2.0, 30.0, 30.0);
                 let xhot = inside(xr, self.inp.mouse);
-                icons::close(d, v2(xr.x + 14.0, xr.y + 14.0), 16.0, if xhot { ERROR } else { DIM });
+                icons::close(d, v2(xr.x + 15.0, xr.y + 15.0), 17.0, if xhot { ERROR } else { DIM });
                 if xhot && self.inp.left_pressed && !self.consumed {
                     self.consumed = true;
                     action = Some(Action::RemoveIndex(i));
@@ -2103,13 +2117,18 @@ impl App {
         let Some(popup) = &self.popup else { return };
         let (kind, anchor, upward) = (popup.kind, popup.anchor, popup.upward);
         let (title, items) = self.popup_items(kind);
-        let size = 16.0;
+        let size = 19.0;
+        let hint_size = 15.0;
         let label_w = items.iter().map(|i| self.fonts.measure(&i.label, size)).fold(0.0, f32::max);
-        let hint_w = items.iter().map(|i| self.fonts.measure(&i.hint, 13.0)).fold(0.0, f32::max);
-        let w = (label_w + hint_w + 80.0).clamp(200.0, (self.inp.w - 20.0).min(520.0));
-        let head = if title.is_some() { 36.0 } else { 6.0 };
-        let body: f32 = items.iter().map(|i| if i.label.is_empty() { 9.0 } else { MENU_ROW }).sum();
-        let h = (head + body + 6.0).min(self.inp.h - 20.0);
+        let hint_w = items.iter().map(|i| self.fonts.measure(&i.hint, hint_size)).fold(0.0, f32::max);
+        let w = (label_w + hint_w + 80.0).clamp(240.0, (self.inp.w - 20.0).min(560.0));
+        let head = if title.is_some() { 42.0 } else { 6.0 };
+        // Rows tighten when the window is too short for the whole menu.
+        let rows = items.iter().filter(|i| !i.label.is_empty()).count() as f32;
+        let seps = (items.len() as f32 - rows) * 11.0;
+        let avail = self.inp.h - 20.0;
+        let row_h = if rows > 0.0 { ((avail - head - seps - 6.0) / rows).clamp(28.0, MENU_ROW) } else { MENU_ROW };
+        let h = (head + seps + rows * row_h + 6.0).min(avail);
         let x = (anchor.x - if upward { w / 2.0 } else { 0.0 }).clamp(10.0, self.inp.w - w - 10.0);
         let y = if upward { anchor.y - h - 8.0 } else { anchor.y }.clamp(10.0, (self.inp.h - h - 10.0).max(10.0));
         let r = Rectangle::new(x, y, w, h);
@@ -2125,29 +2144,29 @@ impl App {
         d.draw_rectangle_rounded(r, 0.06, 8, Color::new(30, 30, 36, 250));
         d.draw_rectangle_rounded_lines_ex(r, 0.06, 8, 1.0, fade(Color::WHITE, 0.08));
         if let Some(t) = title {
-            self.fonts.draw(d, t, v2(x + 16.0, y + 10.0), 15.0, DIM);
+            self.fonts.draw(d, t, v2(x + 18.0, y + 12.0), 16.0, DIM);
         }
         let mut iy = y + head;
         let mut chosen = None;
         for item in &items {
             if item.label.is_empty() {
-                d.draw_rectangle_rec(Rectangle::new(x + 10.0, iy + 4.0, w - 20.0, 1.0), fade(Color::WHITE, 0.1));
-                iy += 9.0;
+                d.draw_rectangle_rec(Rectangle::new(x + 10.0, iy + 5.0, w - 20.0, 1.0), fade(Color::WHITE, 0.1));
+                iy += 11.0;
                 continue;
             }
-            if iy + MENU_ROW > y + h {
+            if iy + row_h > y + h {
                 break;
             }
-            let row = Rectangle::new(x + 4.0, iy, w - 8.0, MENU_ROW);
+            let row = Rectangle::new(x + 4.0, iy, w - 8.0, row_h);
             let enabled = item.action.is_some();
             let hot = live && enabled && inside(row, self.inp.mouse);
             if hot {
                 d.draw_rectangle_rounded(row, 0.25, 6, fade(ACCENT, 0.2));
             }
             if item.checked {
-                d.draw_circle_v(v2(x + 20.0, iy + MENU_ROW / 2.0), 4.0, ACCENT);
+                d.draw_circle_v(v2(x + 21.0, iy + row_h / 2.0), 4.5, ACCENT);
             }
-            let label = self.fonts.fit(&item.label, size, w - 60.0 - hint_w).into_owned();
+            let label = self.fonts.fit(&item.label, size, w - 66.0 - hint_w).into_owned();
             let col = if !enabled {
                 DIM
             } else if item.checked {
@@ -2155,15 +2174,15 @@ impl App {
             } else {
                 FG
             };
-            self.fonts.draw(d, &label, v2(x + 34.0, iy + 7.0), size, col);
+            self.fonts.draw(d, &label, v2(x + 38.0, iy + (row_h - size) / 2.0 - 1.0), size, col);
             if !item.hint.is_empty() {
-                let hw = self.fonts.measure(&item.hint, 13.0);
-                self.fonts.draw(d, &item.hint, v2(x + w - hw - 14.0, iy + 9.0), 13.0, DIM);
+                let hw = self.fonts.measure(&item.hint, hint_size);
+                self.fonts.draw(d, &item.hint, v2(x + w - hw - 16.0, iy + (row_h - hint_size) / 2.0), hint_size, DIM);
             }
             if hot && self.inp.left_pressed {
                 chosen = item.action.clone();
             }
-            iy += MENU_ROW;
+            iy += row_h;
         }
         let m = self.inp.mouse;
         if live && (self.inp.left_pressed || self.inp.right_pressed) {
@@ -2302,13 +2321,13 @@ impl App {
     }
 
     fn browser_scroll_to_selection(&mut self) {
-        let view = self.modal_rect().height - 190.0;
+        let view = self.modal_rect().height - 250.0;
         if let Some(Modal::Browser(b)) = &mut self.modal {
-            let y = b.selected as f32 * 34.0;
+            let y = b.selected as f32 * BROWSER_ROW;
             if y < b.scroll {
                 b.scroll = y;
-            } else if y + 34.0 > b.scroll + view {
-                b.scroll = y + 34.0 - view;
+            } else if y + BROWSER_ROW > b.scroll + view {
+                b.scroll = y + BROWSER_ROW - view;
             }
         }
     }
@@ -2361,7 +2380,7 @@ impl App {
             BrowseMode::Subtitle => "Load subtitle",
         };
         let mode = b.mode;
-        self.fonts.draw(d, title, v2(r.x + 24.0, r.y + 16.0), 22.0, FG);
+        self.fonts.draw(d, title, v2(r.x + 24.0, r.y + 16.0), 24.0, FG);
         if self.icon_button(d, v2(r.x + r.width - 28.0, r.y + 28.0), 20.0, Layer::Modal, false, icons::close) {
             self.modal = None;
             return;
@@ -2376,27 +2395,27 @@ impl App {
             ("Root", PathBuf::from("/")),
         ];
         let mut px = r.x + 24.0;
-        let py = r.y + 52.0;
+        let py = r.y + 58.0;
         let mut nav: Option<PathBuf> = None;
-        let up_r = Rectangle::new(px, py, 34.0, 28.0);
+        let up_r = Rectangle::new(px, py, 40.0, 34.0);
         let up_hot = self.hover(up_r, Layer::Modal);
         d.draw_rectangle_rounded(up_r, 0.3, 6, fade(Color::WHITE, if up_hot { 0.16 } else { 0.07 }));
-        icons::up(d, v2(px + 17.0, py + 14.0), 16.0, FG);
+        icons::up(d, v2(px + 20.0, py + 17.0), 18.0, FG);
         let mut go_up = self.click(up_r, Layer::Modal);
-        px += 44.0;
+        px += 50.0;
         for (name, path) in &places {
             if !path.is_dir() {
                 continue;
             }
-            let tw = self.fonts.measure(name, 14.0);
-            let pr = Rectangle::new(px, py, tw + 20.0, 28.0);
+            let tw = self.fonts.measure(name, 17.0);
+            let pr = Rectangle::new(px, py, tw + 24.0, 34.0);
             let hot = self.hover(pr, Layer::Modal);
             d.draw_rectangle_rounded(pr, 0.3, 6, fade(Color::WHITE, if hot { 0.16 } else { 0.07 }));
-            self.fonts.draw(d, name, v2(px + 10.0, py + 6.0), 14.0, FG);
+            self.fonts.draw(d, name, v2(px + 12.0, py + 7.0), 17.0, FG);
             if self.click(pr, Layer::Modal) {
                 nav = Some(path.clone());
             }
-            px += tw + 28.0;
+            px += tw + 32.0;
         }
 
         let Some(Modal::Browser(b)) = &mut self.modal else { return };
@@ -2413,20 +2432,20 @@ impl App {
         let cwd = b.cwd.to_string_lossy().into_owned();
         let filter = b.filter.clone();
         let error = b.error.clone();
-        let cwd_line = self.fonts.fit(&cwd, 15.0, r.width - 48.0).into_owned();
-        self.fonts.draw(d, &cwd_line, v2(r.x + 24.0, r.y + 92.0), 15.0, DIM);
-        let fr = Rectangle::new(r.x + 24.0, r.y + 116.0, r.width - 48.0, 32.0);
+        let cwd_line = self.fonts.fit(&cwd, 17.0, r.width - 48.0).into_owned();
+        self.fonts.draw(d, &cwd_line, v2(r.x + 24.0, r.y + 104.0), 17.0, DIM);
+        let fr = Rectangle::new(r.x + 24.0, r.y + 132.0, r.width - 48.0, 40.0);
         d.draw_rectangle_rounded(fr, 0.25, 6, Color::new(14, 14, 17, 255));
         if filter.is_empty() {
-            self.fonts.draw(d, "Type to filter…", v2(fr.x + 12.0, fr.y + 7.0), 15.0, fade(DIM, 0.6));
+            self.fonts.draw(d, "Type to filter…", v2(fr.x + 14.0, fr.y + 9.0), 18.0, fade(DIM, 0.6));
         } else {
-            self.fonts.draw(d, &filter, v2(fr.x + 12.0, fr.y + 7.0), 15.0, FG);
+            self.fonts.draw(d, &filter, v2(fr.x + 14.0, fr.y + 9.0), 18.0, FG);
             d.draw_rectangle_rounded_lines_ex(fr, 0.25, 6, 1.5, fade(ACCENT, 0.7));
         }
 
         // Listing.
-        let list = Rectangle::new(r.x + 12.0, r.y + 158.0, r.width - 24.0, r.height - 158.0 - 56.0);
-        let row_h = 34.0;
+        let list = Rectangle::new(r.x + 12.0, r.y + 184.0, r.width - 24.0, r.height - 184.0 - 66.0);
+        let row_h = BROWSER_ROW;
         let Some(Modal::Browser(b)) = &mut self.modal else { return };
         let entries: Vec<_> = b.visible().into_iter().cloned().collect();
         let content = entries.len() as f32 * row_h;
@@ -2437,13 +2456,13 @@ impl App {
         let scroll = b.scroll;
         let selected = b.selected;
         if let Some(e) = &error {
-            self.fonts.draw(d, e, v2(list.x + 12.0, list.y + 10.0), 15.0, ERROR);
+            self.fonts.draw(d, e, v2(list.x + 12.0, list.y + 10.0), 18.0, ERROR);
         } else if entries.is_empty() {
             let msg = match mode {
                 BrowseMode::Media => "No folders or media files here",
                 BrowseMode::Subtitle => "No folders or subtitle files here",
             };
-            self.fonts.draw(d, msg, v2(list.x + 12.0, list.y + 10.0), 15.0, DIM);
+            self.fonts.draw(d, msg, v2(list.x + 12.0, list.y + 10.0), 18.0, DIM);
         }
         let mut clicked_idx = None;
         let mut double = false;
@@ -2460,17 +2479,17 @@ impl App {
             } else if hot {
                 d.draw_rectangle_rounded(row, 0.2, 6, ROW_HOVER);
             }
-            let ic = v2(list.x + 22.0, y + row_h / 2.0);
+            let ic = v2(list.x + 24.0, y + row_h / 2.0);
             if e.is_dir {
-                icons::folder(d, ic, 18.0, Color::new(120, 170, 230, 255));
+                icons::folder(d, ic, 22.0, Color::new(120, 170, 230, 255));
             } else {
-                icons::file(d, ic, 18.0, ACCENT);
+                icons::file(d, ic, 22.0, ACCENT);
             }
             let size_s = if e.is_dir { String::new() } else { util::fmt_size(e.size) };
-            let sw = self.fonts.measure(&size_s, 14.0);
-            let name = self.fonts.fit(&e.name, 16.0, list.width - 80.0 - sw).into_owned();
-            self.fonts.draw(d, &name, v2(list.x + 44.0, y + 7.0), 16.0, FG);
-            self.fonts.draw(d, &size_s, v2(list.x + list.width - sw - 14.0, y + 9.0), 14.0, DIM);
+            let sw = self.fonts.measure(&size_s, 16.0);
+            let name = self.fonts.fit(&e.name, 19.0, list.width - 90.0 - sw).into_owned();
+            self.fonts.draw(d, &name, v2(list.x + 50.0, y + (row_h - 19.0) / 2.0 - 1.0), 19.0, FG);
+            self.fonts.draw(d, &size_s, v2(list.x + list.width - sw - 14.0, y + (row_h - 16.0) / 2.0), 16.0, DIM);
             if hot && self.inp.left_pressed && !self.consumed {
                 self.consumed = true;
                 clicked_idx = Some(i);
@@ -2482,7 +2501,7 @@ impl App {
         unsafe { raylib::ffi::EndScissorMode() };
 
         // Footer buttons.
-        let fy = r.y + r.height - 46.0;
+        let fy = r.y + r.height - 54.0;
         let mut buttons: Vec<(&str, u8)> = vec![("Open", 0)];
         if mode == BrowseMode::Media {
             buttons.push(("Add to playlist", 1));
@@ -2491,8 +2510,8 @@ impl App {
         let mut bx = r.x + r.width - 24.0;
         let mut pressed = None;
         for (label, id) in buttons.iter().rev() {
-            let tw = self.fonts.measure(label, 15.0);
-            let br = Rectangle::new(bx - tw - 28.0, fy, tw + 28.0, 32.0);
+            let tw = self.fonts.measure(label, 17.0);
+            let br = Rectangle::new(bx - tw - 32.0, fy, tw + 32.0, 38.0);
             let hot = self.hover(br, Layer::Modal);
             let primary = *id == 0;
             let bg = if primary {
@@ -2504,8 +2523,8 @@ impl App {
             self.fonts.draw(
                 d,
                 label,
-                v2(br.x + 14.0, br.y + 7.0),
-                15.0,
+                v2(br.x + 16.0, br.y + 9.0),
+                17.0,
                 if primary { Color::new(30, 22, 10, 255) } else { FG },
             );
             if self.click(br, Layer::Modal) {
@@ -2519,15 +2538,15 @@ impl App {
         let mut tx = r.x + 24.0;
         let mut toggled = None;
         for (label, on, id) in [("Hidden files", hidden, 0u8), ("All files", all, 1u8)] {
-            let tw = self.fonts.measure(label, 14.0);
-            let tr = Rectangle::new(tx, fy + 4.0, tw + 30.0, 24.0);
-            let box_r = Rectangle::new(tx, fy + 9.0, 14.0, 14.0);
+            let tw = self.fonts.measure(label, 16.0);
+            let tr = Rectangle::new(tx, fy + 4.0, tw + 34.0, 30.0);
+            let box_r = Rectangle::new(tx, fy + 11.0, 16.0, 16.0);
             if on {
                 d.draw_rectangle_rounded(box_r, 0.3, 4, ACCENT);
             } else {
                 d.draw_rectangle_rounded_lines_ex(box_r, 0.3, 4, 1.5, DIM);
             }
-            self.fonts.draw(d, label, v2(tx + 22.0, fy + 7.0), 14.0, FG);
+            self.fonts.draw(d, label, v2(tx + 26.0, fy + 9.0), 16.0, FG);
             if self.click(tr, Layer::Modal) {
                 toggled = Some(id);
             }

@@ -3,6 +3,8 @@
 
 use raylib::prelude::*;
 use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 const FONT_CANDIDATES: &[&str] = &[
     "/usr/share/fonts/vazirmatn/Vazirmatn-Medium.ttf",
@@ -18,12 +20,21 @@ const FONT_CANDIDATES: &[&str] = &[
 ];
 
 const BASE_SIZE: i32 = 64;
+/// Text up to this many physical pixels gets its own atlas rasterized at exactly that size.
+const MAX_EXACT_PX: i32 = 64;
 
 pub struct Fonts {
+    /// Large atlas with mipmaps, used for oversized text and as a fallback.
     font: Option<Font>,
+    path: Option<std::ffi::CString>,
+    /// Atlases rasterized at exact physical pixel sizes, so small UI text is drawn 1:1 instead of
+    /// being minified from the large atlas (blurry, especially under fractional desktop scaling).
+    exact: RefCell<HashMap<i32, Font>>,
+    /// Physical pixels per layout unit (the HiDPI scale).
+    scale: Cell<f32>,
 }
 
-fn codepoints() -> String {
+fn codepoints() -> Vec<i32> {
     let ranges: &[(u32, u32)] = &[
         (0x20, 0x7E),
         (0xA0, 0x24F),
@@ -36,13 +47,18 @@ fn codepoints() -> String {
         (0xFB50, 0xFDFF),
         (0xFE70, 0xFEFF),
     ];
-    ranges.iter().flat_map(|&(a, b)| (a..=b).filter_map(char::from_u32)).collect()
+    ranges.iter().flat_map(|&(a, b)| a..=b).filter(|&c| char::from_u32(c).is_some()).map(|c| c as i32).collect()
+}
+
+fn load_raw(path: &std::ffi::CStr, px: i32) -> Option<raylib::ffi::Font> {
+    let mut cps = codepoints();
+    let f = unsafe { raylib::ffi::LoadFontEx(path.as_ptr(), px, cps.as_mut_ptr(), cps.len() as i32) };
+    (f.texture.id != 0 && !f.glyphs.is_null()).then_some(f)
 }
 
 impl Fonts {
     pub fn load(rl: &mut RaylibHandle, thread: &RaylibThread, explicit: Option<&str>) -> Self {
         let _ = (rl, thread); // GL context must exist; raylib's loader is global.
-        let mut cps: Vec<i32> = codepoints().chars().map(|c| c as i32).collect();
         let mut paths: Vec<&str> = explicit.into_iter().collect();
         paths.extend(FONT_CANDIDATES);
         for p in paths {
@@ -50,20 +66,50 @@ impl Fonts {
                 continue;
             }
             let Ok(cpath) = std::ffi::CString::new(p) else { continue };
-            let mut f =
-                unsafe { raylib::ffi::LoadFontEx(cpath.as_ptr(), BASE_SIZE, cps.as_mut_ptr(), cps.len() as i32) };
-            if f.texture.id == 0 || f.glyphs.is_null() {
-                continue;
-            }
+            let Some(mut f) = load_raw(&cpath, BASE_SIZE) else { continue };
             unsafe {
-                // Mipmaps keep small UI text crisp when downscaling the 64px atlas.
+                // Mipmaps keep large text smooth when it is drawn smaller than the atlas.
                 raylib::ffi::GenTextureMipmaps(&mut f.texture);
                 raylib::ffi::SetTextureFilter(f.texture, TextureFilter::TEXTURE_FILTER_TRILINEAR as i32);
-                return Self { font: Some(Font::from_raw(f)) };
+                return Self {
+                    font: Some(Font::from_raw(f)),
+                    path: Some(cpath),
+                    exact: RefCell::default(),
+                    scale: Cell::new(1.0),
+                };
             }
         }
         eprintln!("ghoori: no TrueType font found, falling back to raylib's bitmap font");
-        Self { font: None }
+        Self { font: None, path: None, exact: RefCell::default(), scale: Cell::new(1.0) }
+    }
+
+    /// Set the HiDPI scale (physical pixels per layout unit) for subsequent text.
+    pub fn set_scale(&self, scale: f32) {
+        if scale.is_finite() && scale > 0.0 {
+            self.scale.set(scale);
+        }
+    }
+
+    /// The font and layout size to use for text of `size` layout units.
+    fn pick(&self, size: f32) -> (raylib::ffi::Font, f32) {
+        let scale = self.scale.get();
+        let px = (size * scale).round() as i32;
+        if let Some(path) = &self.path
+            && (6..=MAX_EXACT_PX).contains(&px)
+        {
+            let mut exact = self.exact.borrow_mut();
+            if !exact.contains_key(&px)
+                && let Some(f) = load_raw(path, px)
+            {
+                unsafe { raylib::ffi::SetTextureFilter(f.texture, TextureFilter::TEXTURE_FILTER_BILINEAR as i32) };
+                exact.insert(px, unsafe { Font::from_raw(f) });
+            }
+            if let Some(f) = exact.get(&px) {
+                // Drawn at px / scale layout units, the screen transform maps it to exactly px pixels.
+                return (*f.as_ref(), px as f32 / scale);
+            }
+        }
+        (self.raw(), size)
     }
 
     fn raw(&self) -> raylib::ffi::Font {
@@ -76,12 +122,17 @@ impl Fonts {
     pub fn measure(&self, s: &str, size: f32) -> f32 {
         let vis = visual(s);
         let c = std::ffi::CString::new(vis.replace('\0', "")).unwrap_or_default();
-        unsafe { raylib::ffi::MeasureTextEx(self.raw(), c.as_ptr(), size, 0.0).x }
+        let (font, size) = self.pick(size);
+        unsafe { raylib::ffi::MeasureTextEx(font, c.as_ptr(), size, 0.0).x }
     }
 
     pub fn draw(&self, d: &mut impl RaylibDraw, s: &str, pos: Vector2, size: f32, color: Color) {
         let vis = visual(s);
-        d.draw_text_ex(unsafe { WeakFont::from_raw(self.raw()) }, &vis.replace('\0', ""), pos, size, 0.0, color);
+        let (font, size) = self.pick(size);
+        // Start glyphs on whole physical pixels so they are not resampled between texels.
+        let scale = self.scale.get();
+        let pos = Vector2::new((pos.x * scale).round() / scale, (pos.y * scale).round() / scale);
+        d.draw_text_ex(unsafe { WeakFont::from_raw(font) }, &vis.replace('\0', ""), pos, size, 0.0, color);
     }
 
     /// Draw with a soft shadow for legibility over video.
